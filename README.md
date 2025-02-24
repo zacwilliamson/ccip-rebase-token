@@ -1,66 +1,13 @@
-## Foundry
+1. A protocol that allows users to deposit into a vault and in return, receive rebase tokens that represent their underlying balance.
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+2. The rebase token's balance of function is dynamic to show the changing balance with time.
 
-Foundry consists of:
+3. The protocol sets an interest rate for each user based on some global interest rate of the protocol at the time the user deposits into the vault.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+We will set the interest rate such that the global interest rate can only decrease over time to incentivize early adopters.
 
-## Documentation
+A user deposits into the vault smart contract, the vault contract calls the rebase token and the rebase token mints rebase tokens for the user equal to the amount that they deposited. The user's interest rate is set based on the global interest rate.
 
-https://book.getfoundry.sh/
+Let's say the global interest rate is 0.05% per day and a user deposits. They are given an interest rate of 0.05%. Then, let's say the global interest rate drops to 0.04%. A second user makes a deposit. They inherit the global interest rate of 0.04%, but the first user maintains their interest rate of 0.05%.
 
-## Usage
-
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+Now that we have a basic understanding of our rebase token design, let's go ahead and write the smart contract.
