@@ -87,6 +87,20 @@ contract RebaseToken is ERC20 {
         _mint(_to, _amount);
     }
 
+    /**
+     * @notice Burns tokens when user withdraws from the vault
+     * @param _from User to burn the tokens from
+     * @param _amount Amount of tokens to burn.
+     */
+    function burn(address _from, uint256 _amount) external {
+        // common practice for mitigating dust
+        if (_amount == type(uint256).max) {
+            _amount = balanceOf(_from);
+        }
+        _mintAccruedInterest(_from);
+        _burn(_from, _amount);
+    }
+
     // -----------------------------------------------------
     // Public Functions
     // -----------------------------------------------------
@@ -110,14 +124,19 @@ contract RebaseToken is ERC20 {
 
     /**
      * @dev Updates the last updated timestamp for interest accrual calculation.
+     * Mint the accrued interest tot he user since the last time they interacted with the protocol (eg: burn, mint, transfer)
      * @param _user Address of the user to update.
      */
     function _mintAccruedInterest(address _user) internal {
         // find their current balance of rebase tokens that have been minted to the user (principle balance)
+        uint256 previousBalance = super.balanceOf(_user);
         // calculate their current balance including any interest -> balanceOf(_user)
+        uint256 currentBalance = balanceOf(_user);
         // calculate the number of tokens that need to be minted to the user
+        uint256 balanceIncrease = currentBalance - previousBalance;
         // call _mint to mint the accruded interest to the user
         s_lastUpdatedTimestamp[_user] = block.timestamp;
+        _mint(_user, balanceIncrease);
     }
 
     /**
