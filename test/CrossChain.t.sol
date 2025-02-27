@@ -13,6 +13,8 @@ import {RegistryModuleOwnerCustom} from "@ccip/contracts/src/v0.8/ccip/tokenAdmi
 import {TokenAdminRegistry} from "@ccip/contracts/src/v0.8/ccip/tokenAdminRegistry/TokenAdminRegistry.sol";
 import {TokenPool} from "@ccip/contracts/src/v0.8/ccip/pools/TokenPool.sol";
 import {RateLimiter} from "@ccip/contracts/src/v0.8/ccip/libraries/RateLimiter.sol";
+import {Client} from "@ccip/contracts/src/v0.8/ccip/libraries/Client.sol";
+import {IRouterClient} from "@ccip/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
 
 contract CrossChainTest is Test {
     address public owner = makeAddr("owner");
@@ -142,5 +144,66 @@ contract CrossChainTest is Test {
         // uint64[] memory remoteChainSelectorsToRemove = new uint64[](0);
         localPool.applyChainUpdates(chains);
         vm.stopPrank();
+    }
+
+    function bridgeTokens(
+        uint256 amountToBridge,
+        uint256 localFork,
+        uint256 remoteFork,
+        Register.NetworkDetails memory localNetworkDetails,
+        Register.NetworkDetails memory remoteNetworkDetails,
+        RebaseToken localToken,
+        RebaseToken remoteToken
+    ) public {
+        // Create the message to send tokens cross-chain
+        vm.selectFork(localFork);
+        vm.startPrank(alice);
+        Client.EVMTokenAmount[] memory tokenToSendDetails = new Client.EVMTokenAmount[](1);
+        Client.EVMTokenAmount memory tokenAmount =
+            Client.EVMTokenAmount({token: address(localToken), amount: amountToBridge});
+        tokenToSendDetails[0] = tokenAmount;
+        // Approve the router to burn tokens on users behalf
+        IERC20(address(localToken)).approve(localNetworkDetails.routerAddress, amountToBridge);
+
+        Client.EVM2AnyMessage memory message = Client.EVM2AnyMessage({
+            receiver: abi.encode(alice), // we need to encode the address to bytes
+            data: "", // We don't need any data for this example
+            tokenAmounts: tokenToSendDetails, // this needs to be of type EVMTokenAmount[] as you could send multiple tokens
+            extraArgs: "", // We don't need any extra args for this example
+            feeToken: localNetworkDetails.linkAddress // The token used to pay for the fee
+        });
+        // Get and approve the fees
+        vm.stopPrank();
+        // Give the user the fee amount of LINK
+        ccipLocalSimulatorFork.requestLinkFromFaucet(
+            alice, IRouterClient(localNetworkDetails.routerAddress).getFee(remoteNetworkDetails.chainSelector, message)
+        );
+        vm.startPrank(alice);
+        IERC20(localNetworkDetails.linkAddress).approve(
+            localNetworkDetails.routerAddress,
+            IRouterClient(localNetworkDetails.routerAddress).getFee(remoteNetworkDetails.chainSelector, message)
+        ); // Approve the fee
+        // log the values before bridging
+        uint256 balanceBeforeBridge = IERC20(address(localToken)).balanceOf(alice);
+        console.log("Local balance before bridge: %d", balanceBeforeBridge);
+
+        IRouterClient(localNetworkDetails.routerAddress).ccipSend(remoteNetworkDetails.chainSelector, message); // Send the message
+        uint256 sourceBalanceAfterBridge = IERC20(address(localToken)).balanceOf(alice);
+        console.log("Local balance after bridge: %d", sourceBalanceAfterBridge);
+        assertEq(sourceBalanceAfterBridge, balanceBeforeBridge - amountToBridge);
+        vm.stopPrank();
+
+        vm.selectFork(remoteFork);
+        // Pretend it takes 15 minutes to bridge the tokens
+        vm.warp(block.timestamp + 900);
+        // get initial balance on Arbitrum
+        uint256 initialArbBalance = IERC20(address(remoteToken)).balanceOf(alice);
+        console.log("Remote balance before bridge: %d", initialArbBalance);
+        ccipLocalSimulatorFork.switchChainAndRouteMessage(remoteFork);
+
+        console.log("Remote user interest rate: %d", remoteToken.getUserInterestRate(alice));
+        uint256 destBalance = IERC20(address(remoteToken)).balanceOf(alice);
+        console.log("Remote balance after bridge: %d", destBalance);
+        assertEq(destBalance, initialArbBalance + amountToBridge);
     }
 }
